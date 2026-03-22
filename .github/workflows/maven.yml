@@ -1,10 +1,8 @@
-# This workflow will build a Java project with Maven, and cache/restore any dependencies to improve the workflow execution time
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-java-with-maven
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# Continuous Integration — runs on every push and pull-request to master.
+# Builds the project, executes the full test suite, and uploads both the
+# Surefire test report and the runnable JAR as workflow artifacts.
+#
+# Docker image building and GitHub Releases are handled by docker-release.yml.
 
 name: Java CI with Maven
 
@@ -16,16 +14,41 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: maven
-    - name: Build with Maven
-      run: mvn -B package --file pom.xml
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build and test with Maven
+        working-directory: main
+        run: ./mvnw clean verify -B
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: main/target/surefire-reports/
+          retention-days: 14
+
+      # Name the JAR after the short commit SHA so each run's artifact is distinct.
+      - name: Stage versioned JAR
+        run: |
+          SHA="${{ github.sha }}"
+          JAR_NAME="trackwarrants-${SHA:0:7}.jar"
+          cp main/target/main-0.0.1-SNAPSHOT.jar "/tmp/${JAR_NAME}"
+          echo "JAR_NAME=${JAR_NAME}" >> $GITHUB_ENV
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trackwarrants-jar
+          path: /tmp/${{ env.JAR_NAME }}
+          retention-days: 30
